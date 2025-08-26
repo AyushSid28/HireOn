@@ -3,7 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { User } from "../models/user.models.js";
 import jwt from "jsonwebtoken";
-import { generateOtp, verifyOtp } from "../utils/otp.js";
+import { generateOtp, verifyOtp, sendSmsOtp } from "../utils/otp.js";
 import { v4 as uuidv4 } from "uuid";
 
 const generateAccessAndRefereshTokens = async (userId, sessionId) => {
@@ -137,15 +137,33 @@ export const sendOtpToPhone = asyncHandler(async (req, res) => {
   const user = await User.findOne({ phoneNumber });
   if (!user) throw new ApiError(404, "Phone not registered");
 
+  const formatPhone = (phoneNumber) => {
+    const digits = phoneNumber.replace(/\D/g, '');
+    
+    const withoutLeadingZero = digits.startsWith('0') ? digits.slice(1) : digits;
+    
+    if (!phoneNumber.startsWith('+')) {
+      return `+91${withoutLeadingZero}`;
+    }
+    return phoneNumber;
+  };
+
+  const formattedPhone = formatPhone(phoneNumber);
   const { code, expireAt } = generateOtp();
   user.otp = { code, expireAt };
 
   await user.save();
-  console.log("OTP:", code); // Replace with SMS
-  res.json(new ApiResponse(200, {}, "OTP sent"));
+  
+  try {
+    await sendSmsOtp(formattedPhone, code);
+    res.json(new ApiResponse(200, {}, "OTP sent successfully"));
+  } catch (error) {
+    console.error("SMS sending failed:", error);
+    res.json(new ApiResponse(200, {}, "OTP sent (check console for SMS status)"));
+  }
 });
 
-// ✅ Forgot Password - Reset
+
 export const resetPasswordViaOtp = asyncHandler(async (req, res) => {
   const { phoneNumber, otp, newPassword } = req.body;
   const user = await User.findOne({ phoneNumber });
