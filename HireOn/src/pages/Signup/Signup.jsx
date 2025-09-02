@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { Link } from "react-router-dom"; // 👈 import Link
+import { Link } from "react-router-dom"; 
 
 export default function Signup() {
   const [form, setForm] = useState({
@@ -13,6 +14,7 @@ export default function Signup() {
   });
 
   const VITE_API = import.meta.env.VITE_API_URL;
+  const navigate = useNavigate();
 
   const handleChange = (e) =>
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -20,8 +22,12 @@ export default function Signup() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(`${VITE_API}/api/auth/register`, form);
+      await axios.post(`${VITE_API}/api/auth/register`, form, {
+        withCredentials: true,
+      });
+
       alert("Signup successful");
+      navigate("/personal-form");
     } catch (err) {
       console.error(err);
       alert("Signup failed");

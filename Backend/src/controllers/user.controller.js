@@ -46,9 +46,35 @@ export const registerUser = asyncHandler(async (req, res) => {
 
   const user = await User.create({ fullName, email, phoneNumber, password });
 
+  const sessionId = uuidv4();
+  const { accessToken, refreshToken } = await generateAccessAndRefereshTokens(
+    user._id,
+    sessionId
+  );
+
   res
     .status(201)
-    .json(new ApiResponse(201, { id: user._id }, "User registered."));
+    .cookie("accessToken", accessToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      maxAge: 15 * 60 * 1000, // 15 minutes
+    })
+    .cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    })
+    .json(
+      new ApiResponse(201, {
+        user: {
+          id: user._id,
+          email: user.email,
+          fullName: user.fullName,
+        },
+      }, "User registered and logged in.")
+    );
 });
 
 export const loginUser = asyncHandler(async (req, res) => {

@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List
 import os
@@ -15,6 +16,15 @@ load_dotenv()
 
 # Initialize FastAPI
 app = FastAPI(title="Resume Parser API")
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # Frontend URLs
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Configure Gemini (free tier)
 genai.configure(api_key=os.getenv("GEMINI_API_KEY", "YOUR_API_KEY_HERE"))
@@ -134,38 +144,43 @@ async def root():
 @app.post("/parse-resume", response_model=ResumeSchema)
 async def parse_resume(file: UploadFile = File(...)):
     """
-    Parse a resume file (PDF or DOCX) and return structured data
+    Parse a resume file (PDF or DOCX) and return structured data.
+    The file is saved to the uploads folder before parsing.
     """
     # Validate file type
     if not file.filename.lower().endswith(('.pdf', '.docx')):
         raise HTTPException(status_code=400, detail="Only PDF and DOCX files are supported")
-    
-    # Save uploaded file temporarily
-    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp_file:
+
+    uploads_dir = Path(__file__).parent / "uploads"
+    uploads_dir.mkdir(exist_ok=True)
+    saved_path = uploads_dir / file.filename
+
+    # Save uploaded file to uploads folder
+    with open(saved_path, "wb") as f:
         content = await file.read()
-        tmp_file.write(content)
-        tmp_file_path = tmp_file.name
-    
+        f.write(content)
+
     try:
         # Extract text based on file type
         if file.filename.lower().endswith('.pdf'):
-            text = extract_text_from_pdf(tmp_file_path)
+            text = extract_text_from_pdf(str(saved_path))
         else:
-            text = extract_text_from_docx(tmp_file_path)
-        
+            text = extract_text_from_docx(str(saved_path))
+
         if not text.strip():
             raise HTTPException(status_code=400, detail="No text could be extracted from the file")
-        
+
         # Parse with LLM
         parsed_data = parse_resume_with_llm(text)
-        
+
         # Validate and return
         resume = ResumeSchema(**parsed_data)
         return resume
-        
+
     finally:
-        # Clean up temporary file
-        os.unlink(tmp_file_path)
+        # Optionally, clean up the uploaded file after parsing
+        if saved_path.exists():
+            os.remove(saved_path)
 
 if __name__ == "__main__":
     import uvicorn
